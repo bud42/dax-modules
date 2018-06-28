@@ -1,13 +1,14 @@
 """ Module to automatically archive sessions on XNAT following REDCap data"""
-import os, re, time, logging
-
+import os
+import re
+import time
+import logging
 import redcap
-
 from dax import XnatUtils, SessionModule
-from VUIIS_path_settings import API_URL
 
 LOGGER = logging.getLogger('dax')
 
+DEFAULT_API_URL = 'https://redcap.vanderbilt.edu/api/'
 DEFAULT_MODULE_NAME = 'Auto Archive'
 DEFAULT_TMP_PATH = os.path.join('/tmp', DEFAULT_MODULE_NAME)
 DEFAULT_TEXT_REPORT = 'ERROR in module ' + DEFAULT_MODULE_NAME + ':\n'
@@ -20,13 +21,6 @@ DEFAULT_RC_VUIIS_FIELD = 'scan_id'
 RESET_SLEEP_SECS = 30
 MOVING_SLEEP_SECS = 180
 
-PROJ_DICT = {
-    '1': 'NewhouseCC',
-    '2' : 'NewhouseMM',
-    '3' : 'NewhouseMDDHx',
-    '4' : 'NewhousePL',
-    '5' : 'NewhouseBC'
-}
 
 class Module_Auto_Archive(SessionModule):
     """ Module to automatically archive sessions on XNAT """
@@ -36,7 +30,7 @@ class Module_Auto_Archive(SessionModule):
             directory=DEFAULT_TMP_PATH,
             email=None,
             text_report=DEFAULT_TEXT_REPORT,
-            api_url=API_URL,
+            api_url=DEFAULT_API_URL,
             api_key=DEFAULT_API_KEY,
             rc_proj_field=DEFAULT_RC_PROJ_FIELD,
             rc_subj_field=DEFAULT_RC_SUBJ_FIELD,
@@ -47,11 +41,10 @@ class Module_Auto_Archive(SessionModule):
             rc_sess_event=None,
             proj_map='0',
             pre_proj_filter=None,
-            arc_proj_filter=None
-        ):
+            arc_proj_filter=None):
         """ init function overridden from base-class """
         super(Module_Auto_Archive, self).__init__(
-            mod_name, directory, email, \
+            mod_name, directory, email,
             text_report=text_report
         )
 
@@ -68,8 +61,12 @@ class Module_Auto_Archive(SessionModule):
         self.rc_date_field = rc_date_field
         self.rc_vuiis_field = rc_vuiis_field
 
-        self.rc_fields = [self.rc_proj_field, self.rc_subj_field, self.rc_sess_field, \
-            self.rc_date_field, self.rc_vuiis_field]
+        self.rc_fields = [
+            self.rc_proj_field,
+            self.rc_subj_field,
+            self.rc_sess_field,
+            self.rc_date_field,
+            self.rc_vuiis_field]
         self.rc_subj_event = rc_subj_event
         self.rc_sess_event = rc_sess_event
         self.proj_map = proj_map
@@ -79,7 +76,8 @@ class Module_Auto_Archive(SessionModule):
         self.pa_list = ()
         self.xnat = None
 
-    def change_prearchive_project(self, pre_uri, new_project, reset_first=False):
+    def change_prearchive_project(
+            self, pre_uri, new_project, reset_first=False):
         """ change the project assign to a session in the prearchive """
 
         if reset_first:
@@ -89,12 +87,12 @@ class Module_Auto_Archive(SessionModule):
             LOGGER.debug('RESULT=' + result)
             time.sleep(RESET_SLEEP_SECS)
 
-        post_body = """src={src}&newProject={proj}&async=false""".format(src=pre_uri,
-                                                                         proj=new_project)
+        post_body = """src={src}&newProject={proj}&async=false""".format(
+            src=pre_uri, proj=new_project)
         request_uri = '/data/services/prearchive/move'
         return self.xnat._exec(
             request_uri, 'POST', post_body,
-            {'content-type':'application/x-www-form-urlencoded'}
+            {'content-type': 'application/x-www-form-urlencoded'}
         )
 
     def reset_prearchive_session(self, pre_uri):
@@ -103,10 +101,11 @@ class Module_Auto_Archive(SessionModule):
         request_uri = '/data' + pre_uri
         return self.xnat._exec(
             request_uri, 'POST', post_body,
-            {'content-type':'application/x-www-form-urlencoded'}
+            {'content-type': 'application/x-www-form-urlencoded'}
         )
 
-    def archive_prearchive_session(self, src, proj, subj, exp, reset_first=False):
+    def archive_prearchive_session(
+            self, src, proj, subj, exp, reset_first=False):
         """ archive the session from the prearchive """
 
         if reset_first:
@@ -126,7 +125,7 @@ class Module_Auto_Archive(SessionModule):
         request_uri = '/data/services/archive'
         return self.xnat._exec(
             request_uri, 'POST', post_body,
-            {'content-type':'application/x-www-form-urlencoded'}
+            {'content-type': 'application/x-www-form-urlencoded'}
         )
 
     def load_redcap(self):
@@ -134,12 +133,12 @@ class Module_Auto_Archive(SessionModule):
         rc = redcap.Project(self.api_url, self.api_key)
         rc_sess_fields = self.rc_fields + [rc.def_field]
 
-        if self.rc_sess_event == None:
+        if self.rc_sess_event is None:
             sess_event_list = None
         else:
-            sess_event_list = [self.rc_sess_event]
+            sess_event_list = self.rc_sess_event.split(',')
 
-        if self.rc_subj_event == None:
+        if self.rc_subj_event is None:
             subj_event_list = None
         else:
             subj_event_list = [self.rc_subj_event]
@@ -149,7 +148,7 @@ class Module_Auto_Archive(SessionModule):
             fields=rc_sess_fields,
             raw_or_label='raw',
             events=sess_event_list
-        )   
+        )
 
         # Only keep records with a vuiis number
         self.rc_list = [r for r in self.rc_list if r[self.rc_vuiis_field]]
@@ -163,42 +162,36 @@ class Module_Auto_Archive(SessionModule):
                 events=subj_event_list
             )
 
-            id2subj = dict([(x[rc.def_field], x[self.rc_subj_field]) for x in rc_subj_list])
+            id2subj = dict([
+                (x[rc.def_field], x[self.rc_subj_field]) for x in rc_subj_list
+            ])
 
             # Add subj id to sess events
             for r in self.rc_list:
                 subj_id = r[rc.def_field]
                 r[self.rc_subj_field] = id2subj[subj_id]
 
-        if self.proj_map == '1':
-            # Substitute project name
-            for r in self.rc_list:
-                proj_label = str(r[self.rc_proj_field])
-                r[self.rc_proj_field] = PROJ_DICT[proj_label]
-                
-        elif self.proj_map == '2':
-            # Load the labels from REDCap instead of raw
-            rc_list_labels = rc.export_records(
-                fields=rc_sess_fields,
-                raw_or_label='label',
-                events=sess_event_list
-            )
-            # Replace project raw with project label
-            for r_raw in self.rc_list:
-                for r_label in rc_list_labels:
-                    # Match records
-                    if (r_raw[rc.def_field] == r_label[rc.def_field] and 
-                        r_raw[self.rc_sess_field] == r_label[self.rc_sess_field]
-                    ):
-                        r_raw[self.rc_proj_field] = r_label[self.rc_proj_field]
-        
+        # Load the labels from REDCap
+        rc_list_labels = rc.export_records(
+            fields=rc_sess_fields,
+            raw_or_label='label',
+            events=sess_event_list
+        )
+        # Replace project raw with project label
+        for r_raw in self.rc_list:
+            for r_label in rc_list_labels:
+                # Match records
+                if (r_raw[rc.def_field] == r_label[rc.def_field] and 
+                    r_raw[self.rc_sess_field] == r_label[self.rc_sess_field]):
+                    r_raw[self.rc_proj_field] = r_label[self.rc_proj_field]
+
         # Filter out records not for this project
         if self.arc_proj_filter:
             self.rc_list = [r for r in self.rc_list if r[self.rc_proj_field] == self.arc_proj_filter]
 
     def load_prearchive(self):
         """ retrieve sessions from the prearchive """
-        if self.xnat != None:
+        if self.xnat is not None:
             self.pa_list = self.xnat._get_json('/data/prearchive')
         else:
             LOGGER.error('cannot load prearchive, no XNAT connection.')
@@ -259,7 +252,7 @@ class Module_Auto_Archive(SessionModule):
 
             proj_label = str(rc_scan[self.rc_proj_field])
 
-            if pre_proj == proj_label:  # Skip if already moved to correct project
+            if pre_proj == proj_label:  # Skip if already in correct project
                 LOGGER.debug('project already correct')
                 continue
 
@@ -275,7 +268,7 @@ class Module_Auto_Archive(SessionModule):
             moving = True
             result = self.change_prearchive_project(pre_uri, proj_label, reset_first=True)
             LOGGER.debug('RESULT=' + result)
-            
+
         return moving
 
     def do_archiving(self):
@@ -373,8 +366,8 @@ class Module_Auto_Archive(SessionModule):
             if xnat_subj.exists():
                 xnat_exp = xnat_subj.experiment(exp_label)
                 if xnat_exp.exists():
-                    msg = 'session already exists in XNAT:'
-                    msg += proj_label + ':' + subj_label + ':' + exp_label
+                    msg = 'session already exists in XNAT:{}:{}:{}:{}'.format(
+                        vuiis_label, proj_label, subj_label, exp_label)
                     self.report_error(msg)
                     continue
 
@@ -386,7 +379,9 @@ class Module_Auto_Archive(SessionModule):
                 exp_label)
             )
 
-            result = self.archive_prearchive_session(pre_uri, proj_label, subj_label, exp_label)
+            result = self.archive_prearchive_session(
+                pre_uri, proj_label, subj_label, exp_label
+            )
             LOGGER.debug('RESULT=' + result)
 
     def crosscheck_redcap(self):
@@ -468,9 +463,9 @@ class Module_Auto_Archive(SessionModule):
 
         LOGGER.info('checking Projects of Prearchive Session..')
         self.load_prearchive()
-        moving = self.check_projects()        
-        if moving: # wait for moves to complete
-            LOGGER.info('sessions moved between projects, waiting '+str(MOVING_SLEEP_SECS)+' secs')
+        moving = self.check_projects()
+        if moving:  # wait for moves to complete
+            LOGGER.info('sessions moving projects, waiting '+str(MOVING_SLEEP_SECS)+' secs')
             time.sleep(MOVING_SLEEP_SECS)
         else:
             LOGGER.info('no sessions changed, continuing to archiving')
@@ -495,7 +490,7 @@ class Module_Auto_Archive(SessionModule):
         pass
 
     def needs_run(self, csess, xnat):
-        """ needs_run function to check if it needs to run on the session (never) """
+        """ needs_run function checks if this module should run on session """
         return False
 
     def run(self, sess_info, sess_obj):

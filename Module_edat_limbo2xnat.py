@@ -27,7 +27,7 @@ DEFAULT_TMP_PATH = os.path.join('/tmp', DEFAULT_MODULE_NAME)
 
 DEFAULT_TEXT_REPORT = 'ERROR in module ' + DEFAULT_MODULE_NAME + ':\n'
 
-DEFAULT_LIMBO_DIR = '/data/h_taylor/boydb1/sync-LIMBO'
+DEFAULT_LIMBO_DIR = '/data/h_taylor/sync-LIMBO'
 
 DEFAULT_MAP = {
     'fMRI_EDP': 'Emotion Dot-Probe 08-30-12-{SUBJ}-*.edat2',

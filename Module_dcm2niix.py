@@ -8,6 +8,7 @@ import nibabel as nib
 import subprocess as sb
 import shutil
 from string import Template
+import tempfile
 
 LOGGER = logging.getLogger('dax')
 
@@ -22,7 +23,7 @@ class Module_dcm2niix(ScanModule):
     """ Module to convert dicom to nifti using dcm2niix """
     def __init__(self,
                  mod_name=MODULE_NAME,
-                 directory=TMP_PATH,
+                 directory=tempfile.mkdtemp(),
                  email=None,
                  text_report=TEXT_REPORT,
                  dcm2niixpath=DCM2NIIX_PATH,
@@ -74,6 +75,7 @@ class Module_dcm2niix(ScanModule):
 
     def run(self, scan_info, scan_obj):
         """ run function to convert dicom to nifti and upload data"""
+
         if not len(scan_obj.resource('DICOM').files().get()) > 0:
             LOGGER.debug('no DICOM files')
             return
@@ -90,6 +92,15 @@ class Module_dcm2niix(ScanModule):
         if not nifti_list or not success:
             LOGGER.warn('{0} conversion failed'.format(scan_info['scan_id']))
             self.log_warning_error('dcm2nii Failed', scan_info, error=True)
+
+            # Set scan to unusable so it gets skipped and append to scan note
+            scan_obj.attrs.set('quality', 'unusable')
+            _note = scan_obj.attrs.get('note')
+            if _note:
+                _note = _note + ';'
+
+            _note = _note + 'dcm2niix FAILED'
+            scan_obj.attrs.set('note', _note)
         else:
             self.upload_converted_images(dcm_dir, scan_obj, scan_info)
 
@@ -101,8 +112,8 @@ class Module_dcm2niix(ScanModule):
         LOGGER.debug('converting dcm to nii...')
         cmd_data = {'dcm2niix': self.dcm2niixpath, 'dicom': dcm_path}
         cmd = Template(CMD_TEMPLATE).substitute(cmd_data)
+        print('DEBUG:running cmd:' + cmd)
         try:
-            print('DEBUG:running cmd:' + cmd)
             sb.check_output(cmd.split())
         except sb.CalledProcessError:
             return False
@@ -133,23 +144,23 @@ class Module_dcm2niix(ScanModule):
 
         # Check
         success = self.check_outputs(
-            scan_info, nifti_list, bval_path, bvec_path
-        )
+            scan_info, nifti_list, bval_path, bvec_path)
+
         if not success:
+            print('not successful?')
             return
 
         # Upload
         XnatUtils.upload_files_to_obj(
-            nifti_list, scan_obj.resource('NIFTI'), remove=True
-        )
+            nifti_list, scan_obj.resource('NIFTI'), remove=True)
+
         if os.path.isfile(bval_path) and os.path.isfile(bvec_path):
             # BVAL/BVEC
             XnatUtils.upload_file_to_obj(
-                bval_path, scan_obj.resource('BVAL'), remove=True
-            )
+                bval_path, scan_obj.resource('BVAL'), remove=True)
+
             XnatUtils.upload_file_to_obj(
-                bvec_path, scan_obj.resource('BVEC'), remove=True
-            )
+                bvec_path, scan_obj.resource('BVEC'), remove=True)
 
         # more than one NIFTI uploaded
         if len(nifti_list) > 1:
